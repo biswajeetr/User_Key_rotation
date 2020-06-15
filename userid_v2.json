@@ -1,0 +1,178 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Template to create Cloudwatch events to call lambda function for every user created",
+
+  "Parameters" : {
+    "Password": {
+      "NoEcho": "true",
+      "Type": "String",
+      "Description" : "New account password",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "ConstraintDescription" : "the password must be between 1 and 41 characters"
+    },
+	"UName": {
+      "Type": "String",
+      "Description" : "New account password",
+      "MinLength": "1",
+      "MaxLength": "41",
+      "ConstraintDescription" : "the password must be between 1 and 41 characters"
+    },
+	
+    "LambdaFunctionARN": {
+      "Description": "Exisiting Lambda function ARN",
+      "Type": "String"
+    }
+  	
+  },
+
+  "Resources" : {
+    "CFNUser" : {
+      "Type" : "AWS::IAM::User",
+      "Properties" : {
+		"UserName" : {"Ref":"UName"},
+        "LoginProfile": {
+          "Password": { "Ref" : "Password" }
+        }
+      }
+	},
+    
+	"CFNKeys" : {
+      "Type" : "AWS::IAM::AccessKey",
+      "Properties" : {
+        "UserName" : { "Ref": "CFNUser" }
+
+      }
+    },
+	"MySecret": {
+	"Type": "AWS::SecretsManager::Secret",
+	"Properties": {
+		"Name": {"Ref":"UName"},
+		"SecretString": {
+			"Fn::Join": [
+				"", [
+					"{\"AccessKey\":",
+					"\"",
+					{"Ref" : "CFNKeys"},
+					"\"",
+					",\"SecretKey\":",
+					"\"",
+					{"Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]},
+					"\"",
+					"}"
+				]
+			]
+		}
+	}
+},
+"ScheduledRuleCreate": {
+  "Type": "AWS::Events::Rule",
+  "Properties": {
+    "Description": "ScheduledRule",
+    "ScheduleExpression": "rate(90 days)",
+    "State": "ENABLED",
+    "Targets": [{
+      "Arn": {"Ref":"LambdaFunctionARN"},
+	  "Id":"test",
+	   "Input": {
+			"Fn::Join": [
+				"", [
+                  "{\"action\":\"create\",\"username\":\"",
+                  {
+                    "Ref": "UName"
+                  },
+                  "\"}"
+                ]
+			]
+		}
+    }]
+  }
+},
+"PermissionForEventsToInvokeCreateLambda": {
+  "Type": "AWS::Lambda::Permission",
+  "Properties": {
+    "FunctionName": {"Ref":"LambdaFunctionARN"},
+    "Action": "lambda:InvokeFunction",
+    "Principal": "events.amazonaws.com",
+    "SourceArn": { "Fn::GetAtt": ["ScheduledRuleCreate", "Arn"] }
+  }
+},
+"ScheduledRuleDeactivate": {
+  "Type": "AWS::Events::Rule",
+  "Properties": {
+    "Description": "ScheduledRule",
+    "ScheduleExpression": "rate(100 days)",
+    "State": "ENABLED",
+    "Targets": [{
+      "Arn": {"Ref":"LambdaFunctionARN"},
+	  "Id":"test",
+	   "Input": {
+			"Fn::Join": [
+				"", [
+                  "{\"action\":\"deactivate\",\"username\":\"",
+                  {
+                    "Ref": "UName"
+                  },
+                  "\"}"
+                ]
+			]
+		}
+    }]
+  }
+},
+"PermissionForEventsToInvokeDeactivateLambda": {
+  "Type": "AWS::Lambda::Permission",
+  "Properties": {
+    "FunctionName": {"Ref":"LambdaFunctionARN"},
+    "Action": "lambda:InvokeFunction",
+    "Principal": "events.amazonaws.com",
+    "SourceArn": { "Fn::GetAtt": ["ScheduledRuleDeactivate", "Arn"] }
+  }
+},
+"ScheduledRuleDelete": {
+  "Type": "AWS::Events::Rule",
+  "Properties": {
+    "Description": "ScheduledRule",
+    "ScheduleExpression": "rate(110 days)",
+    "State": "ENABLED",
+    "Targets": [{
+      "Arn": {"Ref":"LambdaFunctionARN"},
+	  "Id":"test",
+	   "Input": {
+			"Fn::Join": [
+				"", [
+                  "{\"action\":\"delete\",\"username\":\"",
+                  {
+                    "Ref": "UName"
+                  },
+                  "\"}"
+                ]
+			]
+		}
+    }]
+  }
+},
+"PermissionForEventsToInvokeDeleteLambda": {
+  "Type": "AWS::Lambda::Permission",
+  "Properties": {
+    "FunctionName": {"Ref":"LambdaFunctionARN"},
+    "Action": "lambda:InvokeFunction",
+    "Principal": "events.amazonaws.com",
+    "SourceArn": { "Fn::GetAtt": ["ScheduledRuleDelete", "Arn"] }
+  }
+}
+	},
+
+  "Outputs" : {
+    "AccessKey" : {
+      "Value" : { "Ref" : "CFNKeys" },
+      "Description" : "AWSAccessKeyId of new user"
+    },
+    "SecretKey" : {
+      "Value" : { "Fn::GetAtt" : ["CFNKeys", "SecretAccessKey"]},
+      "Description" : "AWSSecretKey of new user"
+    }
+  }
+}
+
